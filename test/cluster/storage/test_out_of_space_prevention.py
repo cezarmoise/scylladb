@@ -69,7 +69,8 @@ async def test_user_writes_rejection(manager: ManagerClient, volumes_factory: Ca
             res = await cql.run_async(stmt, host=host)
             assert not res, f"Data found on {host} but it shouldn't be there"
 
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=global_cmdline) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=global_cmdline) as servers:
         cql, hosts = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[0].server_id)
@@ -123,7 +124,8 @@ async def test_user_writes_rejection(manager: ManagerClient, volumes_factory: Ca
 async def test_autotoggle_compaction(manager: ManagerClient, volumes_factory: Callable) -> None:
     cmdline = [*global_cmdline,
                "--logger-log-level", "compaction=debug"]
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=cmdline) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=cmdline) as servers:
         cql, _ = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[0].server_id)
@@ -184,8 +186,8 @@ async def test_critical_utilization_during_decommission(manager: ManagerClient, 
                "--logger-log-level", "load_balancer=debug",
                "--logger-log-level", "debug_error_injection=debug"
                ]
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*2, cmdline=cmdline,
-                                     property_file=[{"dc": "dc1", "rack": "r1"}]*2) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M", "20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=cmdline) as servers:
         cql, _ = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[0].server_id)
@@ -223,7 +225,8 @@ async def test_critical_utilization_during_decommission(manager: ManagerClient, 
 @pytest.mark.asyncio
 @pytest.mark.skip_mode(mode='release', reason='error injections are not supported in release mode')
 async def test_reject_split_compaction(manager: ManagerClient, volumes_factory: Callable) -> None:
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=global_cmdline) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=global_cmdline) as servers:
         cql, _ = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[0].server_id)
@@ -253,7 +256,8 @@ async def test_reject_split_compaction(manager: ManagerClient, volumes_factory: 
 async def test_split_compaction_not_triggered(manager: ManagerClient, volumes_factory: Callable) -> None:
     cmd = [*global_cmdline,
            "--logger-log-level", "compaction=debug"]
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=cmd) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=cmd) as servers:
         cql, _ = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[0].server_id)
@@ -285,7 +289,8 @@ async def test_split_compaction_not_triggered(manager: ManagerClient, volumes_fa
 
 @pytest.mark.asyncio
 async def test_tablet_repair(manager: ManagerClient, volumes_factory: Callable) -> None:
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=global_cmdline) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=global_cmdline) as servers:
         cql, _ = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[0].server_id)
@@ -352,7 +357,8 @@ async def test_tablet_repair(manager: ManagerClient, volumes_factory: Callable) 
 
 @pytest.mark.asyncio
 async def test_autotoggle_reject_incoming_migrations(manager: ManagerClient, volumes_factory: Callable) -> None:
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=global_cmdline) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=global_cmdline) as servers:
         await manager.disable_tablet_balancing()
 
         cql, _ = await manager.get_ready_cql(servers)
@@ -414,7 +420,8 @@ async def test_autotoggle_reject_incoming_migrations(manager: ManagerClient, vol
 async def test_node_restart_while_tablet_split(manager: ManagerClient, volumes_factory: Callable) -> None:
     cmd = [*global_cmdline,
            "--logger-log-level", "compaction=debug"]
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=cmd) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=cmd) as servers:
         cql, _ = await manager.get_ready_cql(servers)
         workdir = await manager.server_get_workdir(servers[0].server_id)
         log = await manager.server_open_log(servers[0].server_id)
@@ -483,7 +490,8 @@ async def test_node_restart_while_tablet_split(manager: ManagerClient, volumes_f
 async def test_repair_failure_on_split_rejection(manager: ManagerClient, volumes_factory: Callable) -> None:
     cmd = [*global_cmdline,
            "--logger-log-level", "compaction=debug"]
-    async with space_limited_servers(manager, volumes_factory, ["20M"]*3, cmdline=cmd) as servers:
+    topology_sizes = {"dc1": {"r1": ["20M"], "r2": ["20M"], "r3": ["20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=cmd) as servers:
         cql, _ = await manager.get_ready_cql(servers)
         workdir = await manager.server_get_workdir(servers[0].server_id)
         log = await manager.server_open_log(servers[0].server_id)
@@ -587,8 +595,8 @@ async def test_sstables_incrementally_released_during_streaming(manager: Manager
                "--logger-log-level", "debug_error_injection=debug"
                ]
     # the coordinator needs more space, so creating a 40M volume for it.
-    async with space_limited_servers(manager, volumes_factory, ["40M", "20M"], cmdline=cmdline,
-                                     property_file=[{"dc": "dc1", "rack": "r1"}]*2) as servers:
+    topology_sizes = {"dc1": {"r1": ["40M", "20M"]}}
+    async with space_limited_servers(manager, volumes_factory, topology_sizes, cmdline=cmdline) as servers:
         cql, _ = await manager.get_ready_cql(servers)
 
         workdir = await manager.server_get_workdir(servers[1].server_id)
