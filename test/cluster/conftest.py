@@ -58,6 +58,20 @@ logger = logging.getLogger(__name__)
 print(f"Driver name {DRIVER_NAME}, version {DRIVER_VERSION}")
 
 
+async def decode_backtrace(build_mode: str, input: str):
+    executable = Path(f"build/{build_mode}/scylla").resolve()
+    proc = await asyncio.create_subprocess_exec(
+        Path("./seastar/scripts/seastar-addr2line").absolute(),
+        "-e",
+        executable.absolute(),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate(input=input.encode())
+    return f"{stdout.decode()}\n{stderr.decode()}"
+
+
 def pytest_addoption(parser):
     parser.addoption('--manager-api', action='store',
                      help='Manager unix socket path')
@@ -243,6 +257,13 @@ async def manager(request: pytest.FixtureRequest,
     # test failure.
     report = request.node.stash[PHASE_REPORT_KEY]
     failed = report.when == "call" and report.failed
+
+    # Check if the test has the check_nodes_for_errors marker
+    if request.node.get_closest_marker("check_nodes_for_errors"):
+        manager_client._check_nodes_for_errors = True
+    found_errors = await manager_client.check_all_errors()
+    failed = failed or found_errors
+
     if failed:
         # Save scylladb logs for failed tests in a separate directory and copy XML report to the same directory to have
         # all related logs in one dir.
@@ -266,10 +287,41 @@ async def manager(request: pytest.FixtureRequest,
     await manager_client.stop()  # Stop client session and close driver after each test
     if cluster_status["server_broken"]:
         pytest.fail(
-            f"test case {test_case_name} leave unfinished tasks on Scylla server. Server marked as broken,"
+            f"test case {test_case_name} left unfinished tasks on Scylla server. Server marked as broken,"
             f" server_broken_reason: {cluster_status["message"]}"
         )
+    if found_errors:
+        full_message = []
+        with open(failed_test_dir_path / "found_errors.txt", "w") as f:
+            for server, data in found_errors.items():
+                summary = []
+                detailed = []
+                if criticals := data.get("critical", []):
+                    summary.append(f"{len(criticals)} critical error(s)")
+                    detailed.extend(criticals)
+                if backtraces := data.get("backtraces", []):
+                    summary.append(f"{len(backtraces)} backtrace(s)")
+                    with open(failed_test_dir_path / f"scylla-{server.server_id}-backtraces.txt", "w") as bt_file:
+                        for backtrace in backtraces:
+                            bt_file.write(backtrace + "\n\n")
+                            decoded_bt = await decode_backtrace(build_mode, backtrace)
+                            bt_file.write(decoded_bt + "\n\n")
+                        detailed.append(f"{len(backtraces)} backtrace(s) saved in {Path(bt_file.name).name}")
 
+                if errors := data.get("error", []):
+                    summary.append(f"{len(errors)} error(s)")
+                    detailed.extend(errors)
+                if cores := data.get("cores", []):
+                    summary.append(f"{len(cores)} core(s): {', '.join(cores)}")
+                if summary:
+                    summary_line = f"Server {server.server_id}: found {', '.join(summary)} (log: { data['log']})"
+                    detailed = [f"  {line}" for line in detailed]
+                    full_message.append(summary_line)
+                    full_message.extend(map(str.rstrip, detailed))
+                    f.write(summary_line + "\n")
+                    f.writelines(detailed)
+                    f.write("\n")
+            pytest.fail(f"\n{'\n'.join(full_message)}")
 
 # "cql" fixture: set up client object for communicating with the CQL API.
 # Since connection is managed by manager just return that object
