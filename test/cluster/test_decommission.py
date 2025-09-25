@@ -30,6 +30,9 @@ async def test_decommissioned_node_cant_rejoin(request, manager: ManagerClient):
     await manager.decommission_node(servers[1].server_id)
     await wait_for_token_ring_and_group0_consistency(manager, time.time() + 30)
     logger.info(f"Attempting to start the node {servers[1]} after it was decommissioned")
+    manager.ignore_log_patterns.extend([
+        r"Assertion `local_is_initialized\(\)` failed",
+    ])
     await manager.server_start(servers[1].server_id,
                                expected_error='This node was decommissioned and will not rejoin the ring')
     logger.info(f"Got the expected error")

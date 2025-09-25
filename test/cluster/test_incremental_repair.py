@@ -585,6 +585,9 @@ async def test_tablet_incremental_repair_merge_correct_repaired_at_number_after_
             assert sstables_repaired_at == 3
 
 async def do_test_tablet_incremental_repair_merge_error(manager, error):
+    manager.ignore_log_patterns.extend([
+        r"raft_topology - failed to fence previous coordinator seastar::semaphore_aborted",
+    ])
     nr_keys = 100
     # Make sure no data commit log replay after force server stop
     cmdline = ['--enable-commitlog', '0']

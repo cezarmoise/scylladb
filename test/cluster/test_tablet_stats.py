@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 @pytest.mark.asyncio
 @skip_mode('release', 'error injections are not supported in release mode')
 async def test_load_stats_on_coordinator_failover(manager: ManagerClient):
+    manager.ignore_log_patterns.extend([
+        r"raft_topology - failed to fence previous coordinator service::term_changed_error",
+    ])
     cfg = {
         'data_file_capacity': 7000000,
         'tablet_load_stats_refresh_interval_in_seconds': 1

@@ -40,6 +40,11 @@ async def test_kill_coordinator_during_op(manager: ManagerClient) -> None:
     | Bootstrap | done|
     | Replace | done|
     """
+    # This test expect crashes, ignore them
+    manager.ignore_cores_log_patterns.append("Aborting on shard 0, in scheduling group gossip")
+    manager.ignore_log_patterns.extend([
+        r"raft_topology - raft_topology_cmd barrier failed with: service::raft_group_not_found",
+    ])
     # Decrease the failure detector threshold so we don't have to wait for too long.
     config = {
         'failure_detector_timeout_in_ms': 2000
