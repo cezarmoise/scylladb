@@ -167,3 +167,70 @@ class ScyllaLogFile:
                 line = await self._run_in_executor(log_file.readline, loop=loop)
 
         return matches
+
+    async def find_backtraces(self, from_mark: int | None = None) -> list[str]:
+        """
+        Find and extract all backtraces from the log file.
+
+        Each backtrace starts with a line "Backtrace:" followed by lines that start with exactly 2 spaces.  
+        If `from_mark` argument is given, the log is searched from that position, otherwise from the beginning.  
+        Return a list of strings, where each string is a complete backtrace (all lines joined together).  
+        """
+        loop = asyncio.get_running_loop()
+
+        backtraces = []
+
+        with self.file.open(encoding="utf-8") as log_file:
+            if from_mark:
+                await self._run_in_executor(log_file.seek, from_mark, loop=loop)
+            
+            line = await self._run_in_executor(log_file.readline, loop=loop)
+            while line:
+                if line.strip() == "Backtrace:":
+                    # Found a backtrace, collect all lines that start with exactly 2 spaces
+                    backtrace_lines = []
+                    while True:
+                        next_line = await self._run_in_executor(log_file.readline, loop=loop)
+                        if not next_line:
+                            # End of file
+                            break
+                        if next_line.startswith("  ") and not next_line.startswith("   "):
+                            # Line starts with exactly 2 spaces (backtrace entry)
+                            backtrace_lines.append(next_line.strip())
+                        else:
+                            # End of backtrace
+                            line = next_line
+                            break
+                    
+                    if backtrace_lines:
+                        # Join all backtrace lines into a single string
+                        backtraces.append('\n'.join(backtrace_lines))
+                    
+                    # Continue from current line (already read in the inner loop)
+                    continue
+                
+                line = await self._run_in_executor(log_file.readline, loop=loop)
+
+        return backtraces
+
+    async def get_build_id(self) -> str | None:
+        """
+        Extract the build-id from the first line of the log file.
+
+        The first line of a Scylla log file typically contains:
+        "Scylla version ... with build-id <build_id> starting ..."
+
+        Return the build-id string if found, otherwise None.
+        """
+        loop = asyncio.get_running_loop()
+
+        with self.file.open(encoding="utf-8") as log_file:
+            first_line = await self._run_in_executor(log_file.readline, loop=loop)
+            if first_line:
+                # Use regex to extract build-id
+                match = re.search(r'with build-id ([0-9a-f]+)', first_line)
+                if match:
+                    return match.group(1)
+        
+        return None
+

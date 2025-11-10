@@ -13,6 +13,7 @@ import ssl
 import tempfile
 import platform
 import urllib.parse
+import requests
 from multiprocessing import Event, Process
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,6 +56,56 @@ Session.run_async = run_async     # patch Session for convenience
 logger = logging.getLogger(__name__)
 
 print(f"Driver name {DRIVER_NAME}, version {DRIVER_VERSION}")
+
+
+def decode_backtrace(backtrace: str, build_id: str, api_url: str = "https://staging.backtrace.scylladb.com/api/backtrace") -> str:
+    """
+    Decode a backtrace using the ScyllaDB backtrace API.
+    
+    Args:
+        backtrace: Raw backtrace string with addresses
+        build_id: The build ID for the ScyllaDB binary
+        api_url: The API endpoint URL (defaults to staging)
+    
+    Returns:
+        Decoded backtrace as a string, or original backtrace if decoding fails
+    """
+    try:
+        payload = {
+            "build_id": build_id,
+            "input": backtrace
+        }
+        
+        response = requests.post(
+            f"{api_url}?background=false",
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("success"):
+                stdout = result.get("stdout", "")
+                stderr = result.get("stderr", "")
+                return f"Decoding completed with stdout:\n{stdout}\n\nstderr:\n{stderr}"
+            else:
+                return f"Backtrace API returned success=false: {result}"
+        elif response.status_code == 404:
+            result = response.json()
+            detail = result.get("detail", "Unknown error")
+            return f"Backtrace API 404 error: {detail}"
+        elif response.status_code == 422:
+            result = response.json()
+            detail = result.get("detail", [])
+            return f"Backtrace API validation error (422): {detail}"
+        else:
+            return f"Failed to decode backtrace. Status: {response.status_code}, Response: {response.text}"
+    except Exception as e:
+        return f"Exception while decoding backtrace: {e}"
 
 
 def pytest_addoption(parser):
@@ -282,6 +333,16 @@ async def manager(request: pytest.FixtureRequest,
                 if criticals := data.get("critical", []):
                     summary.append(f"{len(criticals)} critical error(s)")
                     detailed.extend(criticals)
+                if backtraces := data.get("backtraces", []):
+                    summary.append(f"{len(backtraces)} backtrace(s)")
+                    with open(failed_test_dir_path / f"scylla-{server.server_id}-backtraces.txt", "w") as bt_file:
+                        for bt in backtraces:
+                            bt_file.write(bt + "\n\n")
+                            build_id = data.get("build_id")
+                            decoded_bt = decode_backtrace(bt, build_id)
+                            bt_file.write(decoded_bt + "\n\n")
+                        detailed.append(f"{len(backtraces)} backtrace(s) saved in {Path(bt_file.name).name}")
+
                 if errors := data.get("error", []):
                     summary.append(f"{len(errors)} error(s)")
                     detailed.extend(errors)
