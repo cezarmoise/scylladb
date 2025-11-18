@@ -197,7 +197,6 @@ class ManagerClient:
                 # Find the backtraces for the critical errors
                 if found_backtraces := await log_file.find_backtraces():
                     errors[server]["backtraces"] = found_backtraces
-                    errors[server]["build_id"] = await log_file.get_build_id()
             if self._check_nodes_for_errors:
                 if found_errors := await log_file.grep_for_errors(distinct_errors=True):
                     if filtered_errors := await self.filter_errors(found_errors):

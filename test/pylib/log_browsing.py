@@ -188,7 +188,7 @@ class ScyllaLogFile:
             while line:
                 if line.strip() == "Backtrace:":
                     # Found a backtrace, collect all lines that start with exactly 2 spaces
-                    backtrace_lines = []
+                    backtrace_lines = [line]
                     while True:
                         next_line = await self._run_in_executor(log_file.readline, loop=loop)
                         if not next_line:
@@ -196,7 +196,7 @@ class ScyllaLogFile:
                             break
                         if next_line.startswith("  ") and not next_line.startswith("   "):
                             # Line starts with exactly 2 spaces (backtrace entry)
-                            backtrace_lines.append(next_line.strip())
+                            backtrace_lines.append(next_line)
                         else:
                             # End of backtrace
                             line = next_line
@@ -204,7 +204,7 @@ class ScyllaLogFile:
                     
                     if backtrace_lines:
                         # Join all backtrace lines into a single string
-                        backtraces.append('\n'.join(backtrace_lines))
+                        backtraces.append(''.join(backtrace_lines))
                     
                     # Continue from current line (already read in the inner loop)
                     continue
@@ -212,25 +212,3 @@ class ScyllaLogFile:
                 line = await self._run_in_executor(log_file.readline, loop=loop)
 
         return backtraces
-
-    async def get_build_id(self) -> str | None:
-        """
-        Extract the build-id from the first line of the log file.
-
-        The first line of a Scylla log file typically contains:
-        "Scylla version ... with build-id <build_id> starting ..."
-
-        Return the build-id string if found, otherwise None.
-        """
-        loop = asyncio.get_running_loop()
-
-        with self.file.open(encoding="utf-8") as log_file:
-            first_line = await self._run_in_executor(log_file.readline, loop=loop)
-            if first_line:
-                # Use regex to extract build-id
-                match = re.search(r'with build-id ([0-9a-f]+)', first_line)
-                if match:
-                    return match.group(1)
-        
-        return None
-
