@@ -1310,6 +1310,7 @@ class TestCQLAudit(AuditTester):
 
     @pytest.mark.parametrize("audit_config_changer", [AuditSighupConfigChanger, AuditCqlConfigChanger])
     @pytest.mark.parametrize("helper_class", [AuditBackendTable, AuditBackendSyslog])
+    @pytest.mark.check_nodes_for_errors
     def test_config_liveupdate(self, helper_class, audit_config_changer):
         """
         Test liveupdate config changes in audit.

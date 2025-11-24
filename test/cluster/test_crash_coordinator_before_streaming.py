@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
+@pytest.mark.check_nodes_for_errors
 @skip_mode('release', 'error injections are not supported in release mode')
 async def test_kill_coordinator_during_op(manager: ManagerClient) -> None:
     """ Kill coordinator with error injection while topology operation is running for cluster: decommission,

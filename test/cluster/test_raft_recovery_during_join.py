@@ -21,6 +21,7 @@ from test.cluster.util import check_system_topology_and_cdc_generations_v3_consi
 
 
 @pytest.mark.asyncio
+@pytest.mark.check_nodes_for_errors
 @skip_mode('release', 'error injections are not supported in release mode')
 async def test_raft_recovery_during_join(manager: ManagerClient):
     """

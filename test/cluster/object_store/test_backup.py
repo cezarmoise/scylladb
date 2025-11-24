@@ -126,6 +126,7 @@ async def test_backup_move(manager: ManagerClient, object_storage, move_files):
 
 
 @pytest.mark.asyncio
+@pytest.mark.check_nodes_for_errors
 async def test_backup_to_non_existent_bucket(manager: ManagerClient, object_storage):
     '''backup should fail if the destination bucket does not exist'''
 

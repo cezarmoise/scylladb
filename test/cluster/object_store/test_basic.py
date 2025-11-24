@@ -210,6 +210,7 @@ async def test_misconfigured_storage(manager: ManagerClient, object_storage):
 
 
 @pytest.mark.asyncio
+@pytest.mark.check_nodes_for_errors
 async def test_memtable_flush_retries(manager: ManagerClient, tmpdir, object_storage):
     '''verify that memtable flush doesn't crash in case storage access keys are incorrect'''
 

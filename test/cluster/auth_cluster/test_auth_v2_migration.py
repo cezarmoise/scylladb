@@ -123,7 +123,7 @@ async def check_auth_v2_data_migration(manager: ManagerClient, hosts):
         role_attributes.add((row.role, row.name, row.value))
     assert role_attributes == set(data[3]["rows"])
 
-
+@pytest.mark.check_nodes_for_errors
 async def check_auth_v2_works(manager: ManagerClient, hosts):
     cql = manager.get_cql()
     roles = set()

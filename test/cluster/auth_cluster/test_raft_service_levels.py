@@ -560,7 +560,8 @@ async def test_driver_service_level(manager: ManagerClient) -> None:
         assert len(await cql.run_async("LIST ALL SERVICE LEVELS", host=host)) == 0
 
 @pytest.mark.asyncio
-async def test_driver_service_creation_failure(manager: ManagerClient) -> None:
+@pytest.mark.check_nodes_for_errors
+async def test_driver_service_creation_failure(manager: ManagerClient):
     servers = await manager.servers_add(2, config=auth_config, auto_rack_dc="dc1")
 
     cql = manager.get_cql()
