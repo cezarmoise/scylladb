@@ -259,6 +259,9 @@ async def manager(request: pytest.FixtureRequest,
     report = request.node.stash[PHASE_REPORT_KEY]
     failed = report.when == "call" and report.failed
 
+    # Check if the test has the check_nodes_for_errors marker
+    if request.node.get_closest_marker("check_nodes_for_errors"):
+        manager_client._check_nodes_for_errors = True
     found_errors = await manager_client.check_all_errors()
     failed = failed or found_errors
 
@@ -320,12 +323,6 @@ async def manager(request: pytest.FixtureRequest,
                     f.writelines(detailed)
                     f.write("\n")
             pytest.fail(f"\n{'\n'.join(lines)}\nSee found_errors.txt for details.")
-
-@pytest.fixture(scope="function")
-async def check_nodes_for_errors(manager: ManagerClient):
-    """Fixture to enable checking nodes for errors in logs after test execution."""
-    manager._check_nodes_for_errors = True
-
 
 # "cql" fixture: set up client object for communicating with the CQL API.
 # Since connection is managed by manager just return that object
