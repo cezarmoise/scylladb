@@ -245,6 +245,7 @@ docker_common_args+=(
        --cap-add SYS_PTRACE \
        --privileged \
        --ulimit nofile=$(ulimit -Sn):$hard_limit \
+       --ulimit core=-1:-1 \
        -v "$PWD:$PWD" \
        -v "$tmpdir:/tmp" \
        -v "$MAVEN_LOCAL_REPO:$MAVEN_LOCAL_REPO" \
