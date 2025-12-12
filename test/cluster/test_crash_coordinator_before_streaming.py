@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
+@pytest.mark.check_nodes_for_errors
 @skip_mode('release', 'error injections are not supported in release mode')
 async def test_kill_coordinator_during_op(manager: ManagerClient) -> None:
     """ Kill coordinator with error injection while topology operation is running for cluster: decommission,
@@ -50,6 +51,9 @@ async def test_kill_coordinator_during_op(manager: ManagerClient) -> None:
     nodes = [await manager.server_add(config=config, cmdline=cmdline) for _ in range(5)]
     coordinators_ids = await get_coordinator_host_ids(manager)
     assert len(coordinators_ids) == 1, "At least 1 coordinator id should be found"
+
+    # Configure manager to ignore crashes caused by crash_coordinator_before_stream injection
+    manager.ignore_cores_log_patterns.append("crash_coordinator_before_stream: aborting")
 
     # kill coordinator during decommission
     logger.debug("Kill coordinator during decommission")
