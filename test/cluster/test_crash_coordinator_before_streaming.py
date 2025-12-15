@@ -53,7 +53,7 @@ async def test_kill_coordinator_during_op(manager: ManagerClient) -> None:
     assert len(coordinators_ids) == 1, "At least 1 coordinator id should be found"
 
     # Configure manager to ignore crashes caused by crash_coordinator_before_stream injection
-    manager.ignore_cores_log_patterns.append("crash_coordinator_before_stream: aborting")
+    # manager.ignore_cores_log_patterns.append("crash_coordinator_before_stream: aborting")
 
     # kill coordinator during decommission
     logger.debug("Kill coordinator during decommission")
