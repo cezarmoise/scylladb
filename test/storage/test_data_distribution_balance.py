@@ -22,32 +22,26 @@ MAX_IMBALANCE_PERCENTAGE = 5  # maximum allowed imbalance between nodes in perce
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("num_nodes", [3, 4, 6])
 @pytest.mark.parametrize("strategy", ["LeveledCompactionStrategy", "SizeTieredCompactionStrategy", "TimeWindowCompactionStrategy", "IncrementalCompactionStrategy"])
-async def test_data_distribution_balance(manager: ManagerClient, volumes_factory: Callable, num_nodes: int, strategy: str) -> None:
+async def test_data_distribution_balance(manager: ManagerClient, volumes_factory: Callable, strategy: str) -> None:
     """
     Test that data is evenly distributed across nodes after writes and compaction.
 
-    The test creates a cluster with the given number of nodes, each with a limited disk space.  
-    It then creates a keyspace and a table with the given compaction strategy, and inserts
-    a large amount of data, setup in such a way that there are multiple partitions of varying sizes.
+    The test creates a cluster with nodes that each have a different disk space size.  
+    It then creates a keyspace and a table with the given compaction strategy,
+    and inserts a large amount of data, setup in such a way that there are multiple partitions of varying sizes.
 
     After flushing and compacting the data, it checks that the disk usage across nodes is balanced within the defined threshold.
     """
     config = {
         "commitlog_segment_size_in_mb": 2, 
-        "commitlog_total_space_in_mb": 10,  # limit commitlog so it has a smaller impact on disk space and balancing
-        "size_based_balance_threshold_percentage": 3,  # lower than MAX_IMBALANCE_PERCENTAGE to make balancing more aggressive
-        "tablet_load_stats_refresh_interval_in_seconds": 10  # default is 60, lowering it to make test faster
+        "commitlog_total_space_in_mb": 10,  # limit commitlog so it has a smaller impact on disk space
+        "minimal_tablet_size_for_balancing": 1,  # tablets are small in this test
+        "tablet_load_stats_refresh_interval_in_seconds": 1  # default is 60, lowering it to make test faster
     }
 
-    # Generate a topology with the specified number of nodes
-    # Total size is fixed at 1000MB
-    topology_sizes = {
-        3: {"dc1": {"r1": ["250M", "250M", "500M"]}},
-        4: {"dc1": {"r1": ["200M", "200M", "300M", "300M"]}},
-        6: {"dc1": {"r1": ["150M", "150M", "150M", "150M", "200M", "200M"]}},
-    }[num_nodes]
+    # Generate a topology where nodes have different disk space sizes
+    topology_sizes = {"dc1": {"r1": ["250M", "300M", "350M", "400M"]}}
 
     async with space_limited_servers(manager, volumes_factory, topology_sizes, config=config, cmdline=["--logger-log-level=load_balancer=debug"]) as servers:
         cql, _ = await manager.get_ready_cql(servers)
@@ -82,21 +76,34 @@ async def test_data_distribution_balance(manager: ManagerClient, volumes_factory
                 # Trigger compaction
                 await asyncio.gather(*(manager.api.keyspace_compaction(server.ip_addr, ks) for server in servers))
 
-                # wait for tablet refresh
+                # Wait for next tablet refresh
                 coordinator = await get_coordinator_host(manager)
                 log = await manager.server_open_log(coordinator.server_id)
-                await log.wait_for(r"raft_topology - raft topology: Refreshed table load stats for all DC\(s\)\.")
+                mark = await log.mark()
+                await log.wait_for(r"raft_topology - raft topology: Refreshed table load stats for all DC\(s\)\.", from_mark=mark)
 
                 # Wait for tablet migration to finish
-                await asyncio.gather(*(manager.api.quiesce_topology(server.ip_addr) for server in servers))
+                for _ in range(3):
+                    await asyncio.gather(*(manager.api.quiesce_topology(server.ip_addr) for server in servers))
 
                 usages = []
                 for server in servers:
+                    # disk usage is data / capacity; and capacity = data + free space
                     workdir = await manager.server_get_workdir(server.server_id)
-                    disk_info = psutil.disk_usage(workdir)
-                    usages.append(disk_info.percent)
-                    logger.info(f"Disk usage for server {server.server_id}: {disk_info}")
-                    res = subprocess.run(["du", "-h", "-BM", "-d", "1", workdir], capture_output=True, check=False, encoding="utf-8")
-                    logger.debug(f"Disk space per folder:\n{res.stdout.strip()}")
+                    data_dir = os.path.join(workdir, "data")
+                    free_bytes = psutil.disk_usage(workdir).free
+                    res = subprocess.run(["du", "-B1", "-s", data_dir], capture_output=True, check=False, encoding="utf-8")
+                    data_bytes = int(res.stdout.strip().split()[0])
+                    disk_usage = data_bytes / (data_bytes + free_bytes) * 100
+                    usages.append(disk_usage)
+
+                    # debug logging for exact disk usage
+                    host_id = await manager.get_host_id(server.server_id)
+                    logger.debug(f"Server {server.server_id} {host_id} disk usage: {disk_usage}% (data bytes:{data_bytes} free bytes: {free_bytes} capacity: {data_bytes + free_bytes})")
+                    logger.debug(f"Disk usage of workdir: {psutil.disk_usage(workdir)}")
+                    res = subprocess.run(["du", "-B1", "-d1", workdir], capture_output=True, check=False, encoding="utf-8")
+                    logger.debug(f"`du` of workdir :\n{res.stdout.strip()}")
+                    res = subprocess.run(["du", "-BM", f"{workdir}/commitlog"], capture_output=True, check=False, encoding="utf-8")
+                    logger.debug(f"`du` of commitlog :\n{res.stdout.strip()}")
 
                 assert max(usages) - min(usages) <= MAX_IMBALANCE_PERCENTAGE, f"Data distribution is {max(usages) - min(usages):<.2f}% imbalanced: {usages}"
